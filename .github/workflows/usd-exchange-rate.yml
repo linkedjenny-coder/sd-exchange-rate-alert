@@ -2,7 +2,7 @@ name: Daily USD Exchange Rate Alert
 
 on:
   schedule:
-    - cron: '10 0 * * *'  # 매일 오전 9시 10분 (KST)
+    - cron: '10 0 * * *'
   workflow_dispatch:
 
 jobs:
@@ -16,22 +16,24 @@ jobs:
         BOK_API_KEY: ${{ secrets.BOK_API_KEY }}
       run: |
         KOREAN_DATE=$(TZ=Asia/Seoul date '+%Y년 %m월 %d일 (%a)')
-        DAY_OF_WEEK=$(TZ=Asia/Seoul date '+%u')  # 1=월, 7=일
+        DAY_OF_WEEK=$(TZ=Asia/Seoul date '+%u')
         
-        # 토요일(6) 또는 일요일(7)이면 금요일 날짜 사용
         if [ "$DAY_OF_WEEK" -eq 6 ]; then
           TARGET_DATE=$(TZ=Asia/Seoul date -d '1 day ago' '+%Y%m%d')
-          NOTE="(금요일 환율 기준)"
+          NOTE="(금요일 환율)"
         elif [ "$DAY_OF_WEEK" -eq 7 ]; then
           TARGET_DATE=$(TZ=Asia/Seoul date -d '2 days ago' '+%Y%m%d')
-          NOTE="(금요일 환율 기준)"
+          NOTE="(금요일 환율)"
         else
           TARGET_DATE=$(TZ=Asia/Seoul date '+%Y%m%d')
           NOTE=""
         fi
         
+        echo "TARGET_DATE: $TARGET_DATE"
         RESPONSE=$(curl -s "https://ecos.bok.or.kr/api/StatisticSearch/${BOK_API_KEY}/json/kr/1/1/036Y001/DD/${TARGET_DATE}/${TARGET_DATE}/0000001")
-        RATE=$(echo $RESPONSE | jq -r '.StatisticSearch.row[0].DATA_VALUE')
+        echo "API RESPONSE: $RESPONSE"
+        
+        RATE=$(echo $RESPONSE | jq -r '.StatisticSearch.row[0].DATA_VALUE // "API_ERROR"')
         
         echo "rate=$RATE" >> $GITHUB_OUTPUT
         echo "date=$KOREAN_DATE" >> $GITHUB_OUTPUT
@@ -44,5 +46,5 @@ jobs:
         RATE="${{ steps.get_rate.outputs.rate }}"
         DATE="${{ steps.get_rate.outputs.date }}"
         NOTE="${{ steps.get_rate.outputs.note }}"
-        MESSAGE="💵 **한국은행 공식 USD 환율** ${NOTE}\n\n📅 ${DATE}\n💰 **매매기준율: ${RATE} KRW**\n\n_한국은행 고시환율 / 매일 오전 9시 10분 자동 전송_"
+        MESSAGE="💵 **한국은행 USD 환율** ${NOTE}\n\n📅 ${DATE}\n💰 **매매기준율: ${RATE} KRW**\n\n_매일 오전 9시 10분 자동 전송_"
         curl -X POST "$SLACK_WEBHOOK_URL" -H 'Content-Type: application/json' -d "{\"text\":\"$MESSAGE\"}"
