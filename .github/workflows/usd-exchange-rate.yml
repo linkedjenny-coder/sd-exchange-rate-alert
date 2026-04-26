@@ -16,18 +16,19 @@ jobs:
         KOREAN_DATE=$(TZ=Asia/Seoul date '+%Y년 %m월 %d일 (%a)')
         DAY_OF_WEEK=$(TZ=Asia/Seoul date '+%u')
         
-        # 주말이면 금요일 환율 사용
-        if [ "$DAY_OF_WEEK" -eq 6 ]; then
-          NOTE="(금요일 환율)"
-        elif [ "$DAY_OF_WEEK" -eq 7 ]; then
+        if [ "$DAY_OF_WEEK" -eq 6 ] || [ "$DAY_OF_WEEK" -eq 7 ]; then
           NOTE="(금요일 환율)"
         else
           NOTE=""
         fi
         
-        # exchangerate.host API (안정적)
         RESPONSE=$(curl -s "https://api.exchangerate.host/latest?base=USD&symbols=KRW")
-        RATE=$(echo $RESPONSE | jq -r '.rates.KRW' | xargs printf "%.2f")
+        RATE=$(echo $RESPONSE | jq -r '.rates.KRW')
+        
+        # null 체크
+        if [ "$RATE" = "null" ] || [ -z "$RATE" ]; then
+          RATE="API 오류"
+        fi
         
         echo "rate=$RATE" >> $GITHUB_OUTPUT
         echo "date=$KOREAN_DATE" >> $GITHUB_OUTPUT
