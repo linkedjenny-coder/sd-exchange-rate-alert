@@ -1,0 +1,60 @@
+name: Daily Apartment Price Alert
+
+on:
+  schedule:
+    - cron: '0 22 * * *'  # 매일 오전 7시 (KST)
+  workflow_dispatch:
+
+jobs:
+  send-apartment-price:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Get Apartment Transaction Data
+      id: get_data
+      env:
+        API_KEY: ${{ secrets.APARTMENT_API_KEY }}
+      run: |
+        KOREAN_DATE=$(TZ=Asia/Seoul date '+%Y년 %m월 %d일 (%a)')
+        YEAR_MONTH=$(TZ=Asia/Seoul date '+%Y%m')
+        
+        # 양천구 코드: 11470, 최근 거래 조회
+        RESPONSE=$(curl -s "http://openapi.molit.go.kr:8081/OpenAPI_ToolInstallPackage/service/rest/RTMSOBJSvc/getRTMSDataSvcAptTradeDev?serviceKey=${API_KEY}&LAWD_CD=11470&DEAL_YMD=${YEAR_MONTH}&numOfRows=999")
+        
+        echo "=== API Response Sample ==="
+        echo "$RESPONSE" | head -50
+        
+        # 신트리4단지 필터링 (전용면적 60-85㎡)
+        LATEST=$(echo "$RESPONSE" | grep -A 20 "신트리4" | grep -A 15 "<전용면적>6" | head -1)
+        
+        if [ -z "$LATEST" ]; then
+          PRICE="데이터 없음"
+          AREA="N/A"
+          FLOOR="N/A"
+          DEAL_DATE="조회 필요"
+        else
+          PRICE=$(echo "$RESPONSE" | grep -B 5 "신트리4" | grep "<거래금액>" | head -1 | sed 's/<[^>]*>//g' | xargs)
+          AREA=$(echo "$RESPONSE" | grep -B 5 "신트리4" | grep "<전용면적>" | head -1 | sed 's/<[^>]*>//g' | xargs)
+          FLOOR=$(echo "$RESPONSE" | grep -B 5 "신트리4" | grep "<층>" | head -1 | sed 's/<[^>]*>//g' | xargs)
+          DEAL_DATE=$(echo "$RESPONSE" | grep -B 5 "신트리4" | grep "<거래일>" | head -1 | sed 's/<[^>]*>//g' | xargs)
+        fi
+        
+        echo "price=$PRICE" >> $GITHUB_OUTPUT
+        echo "area=$AREA" >> $GITHUB_OUTPUT
+        echo "floor=$FLOOR" >> $GITHUB_OUTPUT
+        echo "deal_date=$DEAL_DATE" >> $GITHUB_OUTPUT
+        echo "date=$KOREAN_DATE" >> $GITHUB_OUTPUT
+    
+    - name: Send to Slack
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      run: |
+        PRICE="${{ steps.get_data.outputs.price }}"
+        AREA="${{ steps.get_data.outputs.area }}"
+        FLOOR="${{ steps.get_data.outputs.floor }}"
+        DEAL_DATE="${{ steps.get_data.outputs.deal_date }}"
+        DATE="${{ steps.get_data.outputs.date }}"
+        
+        MESSAGE="🏢 **양천구 신트리4단지 실거래가**\n\n📅 ${DATE}\n\n💰 최근 거래 (20평대):\n- 거래가: ${PRICE}만원\n- 전용면적: ${AREA}㎡\n- 층: ${FLOOR}층\n- 거래일: ${DEAL_DATE}\n\n_매일 오전 7시 자동 전송_"
+        
+        curl -X POST "$SLACK_WEBHOOK_URL" -H 'Content-Type: application/json' -d "{\"text\":\"$MESSAGE\"}"
