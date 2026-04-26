@@ -15,10 +15,14 @@ jobs:
       env:
         BOK_API_KEY: ${{ secrets.BOK_API_KEY }}
       run: |
-        TODAY=$(TZ=Asia/Seoul date '+%Y%m%d')
-        RESPONSE=$(curl -s "https://ecos.bok.or.kr/api/StatisticSearch/${BOK_API_KEY}/json/kr/1/1/036Y001/DD/${TODAY}/${TODAY}/0000001")
+        # 최근 7일간 데이터 조회 (주말 대비)
+        END_DATE=$(TZ=Asia/Seoul date '+%Y%m%d')
+        START_DATE=$(TZ=Asia/Seoul date -d '7 days ago' '+%Y%m%d')
+        RESPONSE=$(curl -s "https://ecos.bok.or.kr/api/StatisticSearch/${BOK_API_KEY}/json/kr/1/10/036Y001/DD/${START_DATE}/${END_DATE}/0000001")
         RATE=$(echo $RESPONSE | jq -r '.StatisticSearch.row[0].DATA_VALUE')
+        RATE_DATE=$(echo $RESPONSE | jq -r '.StatisticSearch.row[0].TIME' | sed 's/\([0-9]\{4\}\)\([0-9]\{2\}\)\([0-9]\{2\}\)/\1년 \2월 \3일/')
         echo "rate=$RATE" >> $GITHUB_OUTPUT
+        echo "rate_date=$RATE_DATE" >> $GITHUB_OUTPUT
         KOREAN_DATE=$(TZ=Asia/Seoul date '+%Y년 %m월 %d일 (%a)')
         echo "date=$KOREAN_DATE" >> $GITHUB_OUTPUT
     
@@ -27,6 +31,7 @@ jobs:
         SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
       run: |
         RATE="${{ steps.get_rate.outputs.rate }}"
+        RATE_DATE="${{ steps.get_rate.outputs.rate_date }}"
         DATE="${{ steps.get_rate.outputs.date }}"
-        MESSAGE="💵 **한국은행 공식 USD 환율**\n\n📅 ${DATE}\n💰 **매매기준율: ${RATE} KRW**\n\n_한국은행 고시환율 / 매일 오전 7시 자동 전송_"
+        MESSAGE="💵 **한국은행 공식 USD 환율**\n\n📅 오늘: ${DATE}\n💰 **매매기준율: ${RATE} KRW**\n📌 기준일: ${RATE_DATE}\n\n_한국은행 고시환율 / 매일 오전 7시 자동 전송_"
         curl -X POST "$SLACK_WEBHOOK_URL" -H 'Content-Type: application/json' -d "{\"text\":\"$MESSAGE\"}"
