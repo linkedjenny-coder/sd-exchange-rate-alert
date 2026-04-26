@@ -22,12 +22,14 @@ jobs:
           NOTE=""
         fi
         
-        RESPONSE=$(curl -s "https://api.exchangerate.host/latest?base=USD&symbols=KRW")
-        RATE=$(echo $RESPONSE | jq -r '.rates.KRW')
+        # 가장 안정적인 exchangerate-api.com 사용
+        RATE=$(curl -s "https://api.exchangerate-api.com/v4/latest/USD" | jq -r '.rates.KRW')
         
-        # null 체크
         if [ "$RATE" = "null" ] || [ -z "$RATE" ]; then
-          RATE="API 오류"
+          RATE="조회 실패"
+        else
+          # 소수점 2자리로 반올림
+          RATE=$(echo $RATE | awk '{printf "%.2f", $1}')
         fi
         
         echo "rate=$RATE" >> $GITHUB_OUTPUT
