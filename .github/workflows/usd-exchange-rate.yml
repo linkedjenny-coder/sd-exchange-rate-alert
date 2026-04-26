@@ -13,7 +13,7 @@ jobs:
     - name: Get USD/KRW Exchange Rate
       id: get_rate
       run: |
-        RATE=$(curl -s "https://api.exchangerate-api.com/v4/latest/USD" | jq -r '.rates.KRW')
+        RATE=$(curl -s "https://finance.naver.com/marketindex/exchangeDetail.naver?marketindexCd=FX_USDKRW" | grep -oP 'class="sale">[\d,\.]+' | head -1 | grep -oP '[\d,\.]+' | tr -d ',')
         echo "rate=$RATE" >> $GITHUB_OUTPUT
         KOREAN_DATE=$(TZ=Asia/Seoul date '+%Y년 %m월 %d일 (%a)')
         echo "date=$KOREAN_DATE" >> $GITHUB_OUTPUT
@@ -24,5 +24,5 @@ jobs:
       run: |
         RATE="${{ steps.get_rate.outputs.rate }}"
         DATE="${{ steps.get_rate.outputs.date }}"
-        MESSAGE="💵 **USD/KRW 환율 알림**\n\n📅 ${DATE}\n💰 **1 USD = ${RATE} KRW**\n\n_매일 오전 7시 자동 전송됩니다_"
+        MESSAGE="💵 **네이버 USD/KRW 환율**\n\n📅 ${DATE}\n💰 **1 USD = ${RATE} KRW**\n\n_매일 오전 7시 자동 전송_"
         curl -X POST "$SLACK_WEBHOOK_URL" -H 'Content-Type: application/json' -d "{\"text\":\"$MESSAGE\"}"
